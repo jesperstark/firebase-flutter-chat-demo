@@ -3,19 +3,34 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart';
 
 import 'package:google_sign_in/google_sign_in.dart';
+
 import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_database/ui/firebase_animated_list.dart';
 
 import 'dart:async';
 
 final googleSignIn = new GoogleSignIn();
 final analytics = new FirebaseAnalytics();
+final auth = FirebaseAuth.instance;
 
 Future<Null> _ensureLoggedIn() async {
   GoogleSignInAccount user = googleSignIn.currentUser;
-  if (user == null) user = await googleSignIn.signInSilently(); // try sign in a previously authenticated user.
+  if (user == null)
+    user = await googleSignIn
+        .signInSilently(); // try sign in a previously authenticated user.
   if (user == null) {
     user = await googleSignIn.signIn();
     analytics.logLogin();
+  }
+  if (await auth.currentUser() == null) {
+    GoogleSignInAuthentication credentials =
+        await googleSignIn.currentUser.authentication;
+    await auth.signInWithGoogle(
+      idToken: credentials.idToken,
+      accessToken: credentials.accessToken,
+    );
   }
 }
 
@@ -53,6 +68,7 @@ class ChatScreen extends StatefulWidget {
 }
 
 class ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
+  final reference = FirebaseDatabase.instance.reference().child("messages");
   final List<ChatMessage> _messages = <ChatMessage>[];
   final TextEditingController _textController = new TextEditingController();
   bool _isComposing = false;
@@ -111,19 +127,12 @@ class ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
 
   void _sendMesage({String text}) {
-    ChatMessage message = new ChatMessage(
-      text: text,
-      animationController: new AnimationController(
-        duration: new Duration(milliseconds: 700),
-        vsync: this,
-      ),
-    );
-
-    setState(() {
-      _messages.insert(0, message);
+    reference.push().set({
+      'text': text,
+      'senderName': googleSignIn.currentUser.displayName,
+      'senderPhotoUrl': googleSignIn.currentUser.photoUrl,
     });
-
-    message.animationController.forward();
+    
     analytics.logEvent(name: 'send_message');
   }
 
