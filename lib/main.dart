@@ -67,9 +67,8 @@ class ChatScreen extends StatefulWidget {
   State<StatefulWidget> createState() => new ChatScreenState();
 }
 
-class ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
+class ChatScreenState extends State<ChatScreen> {
   final reference = FirebaseDatabase.instance.reference().child("messages");
-  final List<ChatMessage> _messages = <ChatMessage>[];
   final TextEditingController _textController = new TextEditingController();
   bool _isComposing = false;
 
@@ -132,7 +131,7 @@ class ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       'senderName': googleSignIn.currentUser.displayName,
       'senderPhotoUrl': googleSignIn.currentUser.photoUrl,
     });
-    
+
     analytics.logEvent(name: 'send_message');
   }
 
@@ -143,54 +142,36 @@ class ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           title: new Text("Chat demo"),
           elevation:
               Theme.of(context).platform == TargetPlatform.iOS ? 0.0 : 4.0),
-      body: new Container(
-          child: new Column(
-            children: <Widget>[
-              new Flexible(
-                child: new ListView.builder(
-                  padding: new EdgeInsets.all(8.0),
-                  reverse: true,
-                  itemBuilder: (_, int index) => _messages[index],
-                  itemCount: _messages.length,
-                ),
-              ),
-              new Divider(height: 1.0),
-              new Container(
-                decoration:
-                    new BoxDecoration(color: Theme.of(context).cardColor),
-                child: _buildTextComposer(),
-              ),
-            ],
-          ),
-          decoration: Theme.of(context).platform == TargetPlatform.iOS
-              ? new BoxDecoration(
-                  border: new Border(
-                    top: new BorderSide(color: Colors.grey[200]),
-                  ),
-                )
-              : null),
+      body: new Column(
+        children: <Widget>[
+          new Flexible(
+            child: new FirebaseAnimatedList(
+              query: reference,
+              sort: (a, b) => b.key.compareTo(a.key),
+              padding: new EdgeInsets.all(8.0),
+              reverse: true,
+              itemBuilder:
+                  (_, DataSnapshot snapshot, Animation<double> animation) {
+                return new ChatMessage(
+                    snapshot: snapshot, animation: animation);
+              },
+            ),
+          )
+        ],
+      ),
     );
-  }
-
-  @override
-  void dispose() {
-    for (ChatMessage message in _messages) {
-      message.animationController.dispose();
-    }
-    super.dispose();
   }
 }
 
 class ChatMessage extends StatelessWidget {
-  ChatMessage({this.text, this.animationController});
-  final String text;
-  final AnimationController animationController;
+  ChatMessage({this.snapshot, this.animation});
+  final DataSnapshot snapshot;
+  final Animation animation;
 
   @override
   Widget build(BuildContext context) {
     return new SizeTransition(
-      sizeFactor: new CurvedAnimation(
-          parent: animationController, curve: Curves.easeOut),
+      sizeFactor: new CurvedAnimation(parent: animation, curve: Curves.easeOut),
       axisAlignment: 0.0,
       child: new Container(
         margin: const EdgeInsets.symmetric(vertical: 10.0),
@@ -201,17 +182,17 @@ class ChatMessage extends StatelessWidget {
               margin: const EdgeInsets.only(right: 16.0),
               child: new CircleAvatar(
                   backgroundImage:
-                      new NetworkImage(googleSignIn.currentUser.photoUrl)),
+                      new NetworkImage(snapshot.value['senderPhotoUrl'])),
             ),
             new Expanded(
               child: new Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  new Text(googleSignIn.currentUser.displayName,
+                  new Text(snapshot.value['senderName'],
                       style: Theme.of(context).textTheme.subhead),
                   new Container(
                     margin: const EdgeInsets.only(top: 5.0),
-                    child: new Text(text),
+                    child: new Text(snapshot.value['text']),
                   ),
                 ],
               ),
